@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>DUSTLINE — Tactical FPS</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #14161b;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #e8eaf0; }
+  #game, #game canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .hidden { display: none !important; }
+
+  /* Crosshair */
+  .crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  .ch-dot { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: #e8f4ff; box-shadow: 0 0 3px #000; }
+  .ch-t, .ch-b { position: absolute; left: -1px; width: 2px; height: 9px; background: #e8f4ff; box-shadow: 0 0 3px #000; }
+  .ch-l, .ch-r { position: absolute; top: -1px; width: 9px; height: 2px; background: #e8f4ff; box-shadow: 0 0 3px #000; }
+  .hitmarker { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    opacity: 0; transition: opacity .12s; }
+  .hitmarker::before, .hitmarker::after { content: ""; position: absolute; left: 12px; top: 0; width: 2px; height: 26px; background: #fff; }
+  .hitmarker::before { transform: rotate(45deg); }
+  .hitmarker::after { transform: rotate(-45deg); }
+  .hitmarker.show { opacity: 1; }
+  .hitmarker.head::before, .hitmarker.head::after { background: #ff5a4d; }
+  .vignette { position: absolute; inset: 0; opacity: 0; transition: opacity .3s;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(200,20,10,0.55) 100%); }
+  .vignette.show { opacity: 1; }
+  .dmgdir { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px;
+    opacity: 0; border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(255,40,20,0.7) 0deg 40deg, transparent 40deg 360deg); }
+  .dmgdir.show { opacity: 1; }
+
+  /* Top bar */
+  .topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 18px; align-items: center; font-weight: 700; letter-spacing: .04em;
+    text-shadow: 0 1px 3px #000; }
+  .timer { font-size: 26px; background: rgba(10,12,16,.55); padding: 4px 14px; border-radius: 6px; }
+  .timer.urgent { color: #ff6b5e; }
+  .score { font-size: 17px; background: rgba(10,12,16,.55); padding: 6px 12px; border-radius: 6px; }
+  .alive { font-size: 15px; letter-spacing: .18em; }
+  .bombstat { position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; font-weight: 700; color: #ffd27a; text-shadow: 0 1px 3px #000; }
+  .bombstat.hot { color: #ff5a4d; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+
+  /* Killfeed + center + banner */
+  .killfeed { position: absolute; top: 92px; right: 18px; text-align: right; font-size: 14px; font-weight: 600; }
+  .feed-line { background: rgba(10,12,16,.6); padding: 3px 9px; margin-bottom: 4px; border-radius: 4px; }
+  .feed-line.good { color: #8fd8a8; }
+  .feed-line.bad { color: #ff9a8a; }
+  .center { position: absolute; left: 50%; top: 62%; transform: translateX(-50%);
+    font-size: 16px; font-weight: 600; text-shadow: 0 1px 4px #000; }
+  .banner { position: absolute; left: 50%; top: 30%; transform: translateX(-50%);
+    text-align: center; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .banner.show { opacity: 1; }
+  .banner h2 { font-size: 44px; letter-spacing: .12em; text-shadow: 0 2px 12px #000; }
+  .banner-sub { font-size: 17px; margin-top: 6px; text-shadow: 0 1px 4px #000; }
+
+  /* Bottom bar */
+  .bottombar { position: absolute; left: 20px; right: 20px; bottom: 18px;
+    display: flex; align-items: flex-end; justify-content: space-between; }
+  .health-num { font-size: 42px; font-weight: 800; line-height: 1; text-shadow: 0 2px 5px #000; }
+  .health-bar { width: 180px; height: 8px; background: rgba(0,0,0,.55); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+  .health-fill { height: 100%; width: 100%; }
+  .ammo { text-align: right; }
+  .ammo-mag { font-size: 42px; font-weight: 800; line-height: 1; text-shadow: 0 2px 5px #000; display: inline; }
+  .ammo-res { font-size: 20px; color: #b9bec9; display: inline; margin-left: 6px; }
+  .weapon-name { font-size: 14px; color: #cfd4de; margin-top: 4px; }
+  .money { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    font-size: 22px; font-weight: 800; color: #7ee2a0; text-shadow: 0 1px 3px #000; }
+
+  /* Minimap */
+  .minimap-wrap { position: absolute; left: 18px; top: 92px; }
+  .minimap { border: 1px solid rgba(255,255,255,.25); border-radius: 6px; background: rgba(10,12,16,.6); }
+
+  /* Buy menu */
+  .buy { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 520px; background: rgba(12,14,19,.92); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 10px; padding: 20px 22px; pointer-events: auto; }
+  .buy h2 { font-size: 20px; letter-spacing: .1em; margin-bottom: 14px; }
+  .buy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .buy-item { display: flex; flex-direction: column; gap: 3px; text-align: left;
+    background: #1d2129; color: #e8eaf0; border: 1px solid #343a46; border-radius: 8px;
+    padding: 10px 12px; cursor: pointer; font-size: 14px; }
+  .buy-item:hover { border-color: #5aa2ff; }
+  .buy-item.cant { opacity: .45; }
+  .buy-item span { color: #9aa2b1; font-size: 12px; }
+  .buy-item i { color: #5aa2ff; font-style: normal; font-size: 12px; }
+  .buy-hint { margin-top: 12px; font-size: 12px; color: #9aa2b1; }
+
+  /* Start / pause menu */
+  #menu { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; cursor: pointer;
+    background: radial-gradient(ellipse at 50% 40%, rgba(38,32,58,.88), rgba(8,9,12,.94)); }
+  #menu h1 { font-size: 64px; letter-spacing: .22em; color: #ffb347; text-shadow: 0 4px 24px rgba(0,0,0,.8); }
+  #menu-sub { font-size: 17px; color: #cfd4de; max-width: 560px; text-align: center; line-height: 1.5; }
+  #menu .cta { margin-top: 10px; font-size: 19px; font-weight: 700; color: #fff;
+    background: #2b5cb8; padding: 12px 28px; border-radius: 8px; }
+  #menu .keys { font-size: 13px; color: #9aa2b1; line-height: 1.8; text-align: center; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud"></div>
+<div id="menu">
+  <h1 id="menu-title">DUSTLINE</h1>
+  <div id="menu-sub">Tactical FPS — Vanguard vs Jackals</div>
+  <div class="cta">CLICK TO DEPLOY</div>
+  <div class="keys">
+    WASD move · Mouse aim · Click shoot · Right-click aim · R reload · Shift walk · Ctrl/C crouch · Space jump<br>
+    E plant / defuse (hold) · 1/2 weapons · 4 frag · 5 smoke · B buy menu (keys 1–5 buy during buy phase) · First to 5 rounds wins
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
